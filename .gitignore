@@ -1,0 +1,15 @@
+# Binaries and build artifacts
+bin/
+dist/
+*.exe
+*.test
+*.out
+
+# Local environment / config overrides if needed
+.env
+.env.local
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
