@@ -6,20 +6,27 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/Screener-masterskaya/Screener_backend/internal/config"
+	"github.com/Screener-masterskaya/Screener_backend/internal/health"
 )
+
+// readinessTimeout bounds each dependency check in /readyz.
+const readinessTimeout = 2 * time.Second
 
 // App wires together configuration, structured logging, and the HTTP server lifecycle.
 type App struct {
 	cfg    *config.Config
 	log    *slog.Logger
 	server *http.Server
+	health *health.Handler
 }
 
 // NewApp initializes an App instance and configures the HTTP server with timeouts from cfg.
 func NewApp(cfg *config.Config, log *slog.Logger) *App {
-	handler := newRouter()
+	healthHandler := health.New(log, readinessTimeout)
+	handler := newRouter(healthHandler)
 
 	srv := &http.Server{
 		Addr:         cfg.Address,
@@ -33,6 +40,7 @@ func NewApp(cfg *config.Config, log *slog.Logger) *App {
 		cfg:    cfg,
 		log:    log,
 		server: srv,
+		health: healthHandler,
 	}
 }
 
@@ -54,6 +62,8 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		a.log.Info("shutdown signal received, stopping server")
+		a.health.SetShuttingDown()
+
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 		defer cancel()
 
