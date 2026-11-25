@@ -1,7 +1,7 @@
 APP_NAME := screener
 BIN_PATH := bin/$(APP_NAME)
 
-.PHONY: run build test lint
+.PHONY: run build test lint up down
 
 run:
 	go run ./cmd/$(APP_NAME)
@@ -15,3 +15,9 @@ test:
 
 lint:
 	go vet ./...
+
+up:
+	docker compose up -d --build --wait
+
+down:
+	docker compose down
