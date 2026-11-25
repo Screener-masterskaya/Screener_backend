@@ -14,8 +14,7 @@ func resetConfigEnv(t *testing.T) {
 	for _, name := range []string{
 		"APP_ENV", "HTTP_ADDR", "HTTP_READ_TIMEOUT", "HTTP_WRITE_TIMEOUT",
 		"HTTP_IDLE_TIMEOUT", "HTTP_SHUTDOWN_TIMEOUT", "LOG_LEVEL", "LOG_FORMAT",
-		"METRICS_ADDR", "DATABASE_URL", "POSTGRES_POOL_MIN_CONNS",
-		"POSTGRES_POOL_MAX_CONNS", "POSTGRES_POOL_MAX_CONN_LIFETIME", "POSTGRES_CONNECT_TIMEOUT",
+		"METRICS_ADDR", "DATABASE_URL", "DB_MAX_CONNS", "DB_MAX_CONN_LIFETIME", "DB_CONNECT_TIMEOUT",
 	} {
 		t.Setenv(name, "")
 		if err := os.Unsetenv(name); err != nil {
@@ -40,7 +39,7 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.HTTPServer != wantHTTP {
 		t.Errorf("HTTPServer = %+v, want %+v", cfg.HTTPServer, wantHTTP)
 	}
-	wantPool := PostgresPool{0, 10, time.Hour, 5 * time.Second}
+	wantPool := PostgresPool{10, time.Hour, 5 * time.Second}
 	if cfg.Postgres != wantPool {
 		t.Errorf("Postgres = %+v, want %+v", cfg.Postgres, wantPool)
 	}
@@ -49,19 +48,18 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	resetConfigEnv(t)
 	for name, value := range map[string]string{
-		"APP_ENV":                         "production",
-		"HTTP_ADDR":                       ":8000",
-		"HTTP_READ_TIMEOUT":               "1s",
-		"HTTP_WRITE_TIMEOUT":              "2s",
-		"HTTP_IDLE_TIMEOUT":               "3s",
-		"HTTP_SHUTDOWN_TIMEOUT":           "4s",
-		"LOG_LEVEL":                       "warn",
-		"LOG_FORMAT":                      "json",
-		"METRICS_ADDR":                    ":9000",
-		"POSTGRES_POOL_MIN_CONNS":         "2",
-		"POSTGRES_POOL_MAX_CONNS":         "5",
-		"POSTGRES_POOL_MAX_CONN_LIFETIME": "45m",
-		"POSTGRES_CONNECT_TIMEOUT":        "2s",
+		"APP_ENV":               "production",
+		"HTTP_ADDR":             ":8000",
+		"HTTP_READ_TIMEOUT":     "1s",
+		"HTTP_WRITE_TIMEOUT":    "2s",
+		"HTTP_IDLE_TIMEOUT":     "3s",
+		"HTTP_SHUTDOWN_TIMEOUT": "4s",
+		"LOG_LEVEL":             "warn",
+		"LOG_FORMAT":            "json",
+		"METRICS_ADDR":          ":9000",
+		"DB_MAX_CONNS":          "5",
+		"DB_MAX_CONN_LIFETIME":  "45m",
+		"DB_CONNECT_TIMEOUT":    "2s",
 	} {
 		t.Setenv(name, value)
 	}
@@ -78,7 +76,7 @@ func TestLoadOverrides(t *testing.T) {
 	if cfg.HTTPServer != wantHTTP {
 		t.Errorf("HTTPServer = %+v, want %+v", cfg.HTTPServer, wantHTTP)
 	}
-	wantPool := PostgresPool{2, 5, 45 * time.Minute, 2 * time.Second}
+	wantPool := PostgresPool{5, 45 * time.Minute, 2 * time.Second}
 	if cfg.Postgres != wantPool {
 		t.Errorf("Postgres = %+v, want %+v", cfg.Postgres, wantPool)
 	}
@@ -99,11 +97,9 @@ func TestLoadValidation(t *testing.T) {
 		{"invalid log level", "LOG_LEVEL", "verbose"},
 		{"invalid log format", "LOG_FORMAT", "xml"},
 		{"invalid shutdown timeout", "HTTP_SHUTDOWN_TIMEOUT", "abc"},
-		{"zero connection timeout", "POSTGRES_CONNECT_TIMEOUT", "0s"},
-		{"negative pool minimum", "POSTGRES_POOL_MIN_CONNS", "-1"},
-		{"zero pool maximum", "POSTGRES_POOL_MAX_CONNS", "0"},
-		{"overflowing pool maximum", "POSTGRES_POOL_MAX_CONNS", "2147483648"},
-		{"pool minimum exceeds maximum", "POSTGRES_POOL_MIN_CONNS", "11"},
+		{"zero connection timeout", "DB_CONNECT_TIMEOUT", "0s"},
+		{"zero pool maximum", "DB_MAX_CONNS", "0"},
+		{"overflowing pool maximum", "DB_MAX_CONNS", "2147483648"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			resetConfigEnv(t)

@@ -30,7 +30,6 @@ type HTTPServer struct {
 }
 
 type PostgresPool struct {
-	MinConns        int32
 	MaxConns        int32
 	MaxConnLifetime time.Duration
 	ConnectTimeout  time.Duration
@@ -100,8 +99,8 @@ func Load() (*Config, error) {
 		{"HTTP_WRITE_TIMEOUT", "20s", &cfg.WriteTimeout},
 		{"HTTP_IDLE_TIMEOUT", "60s", &cfg.IdleTimeout},
 		{"HTTP_SHUTDOWN_TIMEOUT", "10s", &cfg.ShutdownTimeout},
-		{"POSTGRES_POOL_MAX_CONN_LIFETIME", "1h", &cfg.Postgres.MaxConnLifetime},
-		{"POSTGRES_CONNECT_TIMEOUT", "5s", &cfg.Postgres.ConnectTimeout},
+		{"DB_MAX_CONN_LIFETIME", "1h", &cfg.Postgres.MaxConnLifetime},
+		{"DB_CONNECT_TIMEOUT", "5s", &cfg.Postgres.ConnectTimeout},
 	} {
 		value, err := time.ParseDuration(envOrDefault(setting.name, setting.fallback))
 		if err != nil || value <= 0 {
@@ -109,19 +108,10 @@ func Load() (*Config, error) {
 		}
 		*setting.dest = value
 	}
-
-	minConns, err := strconv.ParseInt(envOrDefault("POSTGRES_POOL_MIN_CONNS", "0"), 10, 32)
-	if err != nil || minConns < 0 {
-		return nil, errors.New("POSTGRES_POOL_MIN_CONNS must be a non-negative 32-bit integer")
-	}
-	maxConns, err := strconv.ParseInt(envOrDefault("POSTGRES_POOL_MAX_CONNS", "10"), 10, 32)
+	maxConns, err := strconv.ParseInt(envOrDefault("DB_MAX_CONNS", "10"), 10, 32)
 	if err != nil || maxConns < 1 {
-		return nil, errors.New("POSTGRES_POOL_MAX_CONNS must be a positive 32-bit integer")
+		return nil, errors.New("DB_MAX_CONNS must be a positive 32-bit integer")
 	}
-	if minConns > maxConns {
-		return nil, errors.New("POSTGRES_POOL_MIN_CONNS must be <= POSTGRES_POOL_MAX_CONNS")
-	}
-	cfg.Postgres.MinConns = int32(minConns)
 	cfg.Postgres.MaxConns = int32(maxConns)
 
 	return cfg, nil
