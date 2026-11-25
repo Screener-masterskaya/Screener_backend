@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/Screener-masterskaya/Screener_backend/internal/platform/metrics"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/Screener-masterskaya/Screener_backend/internal/health"
+	"github.com/Screener-masterskaya/Screener_backend/internal/platform/metrics"
 )
 
 // newRouter собирает корневой HTTP-обработчик с базовыми middleware
@@ -19,7 +21,7 @@ import (
 // порту API.
 //
 // TODO: add middleware with a logger.
-func newRouter(httpMetrics *metrics.HTTP) http.Handler {
+func newRouter(healthHandler *health.Handler, httpMetrics *metrics.HTTP) http.Handler {
 	router := chi.NewRouter()
 
 	router.Use(middleware.RequestID)
@@ -27,6 +29,9 @@ func newRouter(httpMetrics *metrics.HTTP) http.Handler {
 		router.Use(httpMetrics.Middleware)
 	}
 	router.Use(middleware.Recoverer)
+
+	router.Get("/healthz", healthHandler.Liveness)
+	router.Get("/readyz", healthHandler.Readiness)
 
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/", okHandler)
