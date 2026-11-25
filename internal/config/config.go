@@ -1,46 +1,136 @@
 package config
 
 import (
-	"log"
+	"errors"
+	"fmt"
+	"net"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
-
-	"github.com/ilyakaznacheev/cleanenv"
 )
 
-// Config holds top-level runtime and HTTP server settings loaded from a config file.
-// TODO: support env-only overrides without a file
 type Config struct {
-	LogLevel   string `yaml:"log_level"`
-	LogFormat  string `yaml:"log_format"`
-	HTTPServer `yaml:"http_server"`
+	AppEnv      string
+	LogLevel    string
+	LogFormat   string
+	MetricsAddr string
+	DatabaseURL string
+	HTTPServer
+	Postgres PostgresPool
 }
 
-// HTTPServer defines network bind address and connection/shutdown timeouts.
-// TODO: support env-only overrides without a file
 type HTTPServer struct {
-	Address         string        `yaml:"address" env-default:"localhost:8080"`
-	ReadTimeout     time.Duration `yaml:"read_timeout" env-default:"5s"`
-	WriteTimeout    time.Duration `yaml:"write_timeout" env-default:"20s"`
-	IdleTimeout     time.Duration `yaml:"idle_timeout" env-default:"60s"`
-	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"10s"`
+	Address         string
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	ShutdownTimeout time.Duration
 }
 
-// MustLoad reads the configuration file specified by CONFIG_PATH and terminates the process on failure.
-func MustLoad() *Config {
-	cfgPath := os.Getenv("CONFIG_PATH")
-	if cfgPath == "" {
-		log.Fatal("CONFIG_PATH is not set")
+type PostgresPool struct {
+	MinConns        int32
+	MaxConns        int32
+	MaxConnLifetime time.Duration
+	ConnectTimeout  time.Duration
+}
+
+func Load() (*Config, error) {
+	cfg := &Config{
+		AppEnv:      envOrDefault("APP_ENV", "development"),
+		LogLevel:    envOrDefault("LOG_LEVEL", "info"),
+		LogFormat:   envOrDefault("LOG_FORMAT", "text"),
+		MetricsAddr: envOrDefault("METRICS_ADDR", "localhost:9090"),
+		DatabaseURL: strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		HTTPServer:  HTTPServer{Address: envOrDefault("HTTP_ADDR", "localhost:8080")},
 	}
 
-	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		log.Fatalf("config file does not exist: %s", err)
+	if cfg.DatabaseURL == "" {
+		return nil, errors.New("DATABASE_URL is required")
+	}
+	dsn, err := url.Parse(cfg.DatabaseURL)
+	if err != nil || dsn.Hostname() == "" ||
+		(dsn.Scheme != "postgres" && dsn.Scheme != "postgresql") {
+		return nil, errors.New("DATABASE_URL must be a valid PostgreSQL URL")
+	}
+	if port := dsn.Port(); port != "" {
+		n, err := strconv.ParseUint(port, 10, 16)
+		if err != nil || n == 0 {
+			return nil, errors.New("DATABASE_URL port must be between 1 and 65535")
+		}
 	}
 
-	var cfg Config
-	if err := cleanenv.ReadConfig(cfgPath, &cfg); err != nil {
-		log.Fatalf("cannot read config: %s", err)
+	if cfg.AppEnv == "" {
+		return nil, errors.New("APP_ENV must not be empty")
+	}
+	switch cfg.LogLevel {
+	case "debug", "info", "warn", "error":
+	default:
+		return nil, errors.New("LOG_LEVEL must be debug, info, warn, or error")
+	}
+	switch cfg.LogFormat {
+	case "text", "json":
+	default:
+		return nil, errors.New("LOG_FORMAT must be text or json")
 	}
 
-	return &cfg
+	for _, setting := range []struct {
+		name  string
+		value string
+	}{
+		{"HTTP_ADDR", cfg.Address},
+		{"METRICS_ADDR", cfg.MetricsAddr},
+	} {
+		_, port, err := net.SplitHostPort(setting.value)
+		if err != nil || port == "" {
+			return nil, fmt.Errorf("%s must be in host:port format", setting.name)
+		}
+		if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+			return nil, fmt.Errorf("%s port must be between 0 and 65535", setting.name)
+		}
+	}
+
+	for _, setting := range []struct {
+		name     string
+		fallback string
+		dest     *time.Duration
+	}{
+		{"HTTP_READ_TIMEOUT", "5s", &cfg.ReadTimeout},
+		{"HTTP_WRITE_TIMEOUT", "20s", &cfg.WriteTimeout},
+		{"HTTP_IDLE_TIMEOUT", "60s", &cfg.IdleTimeout},
+		{"HTTP_SHUTDOWN_TIMEOUT", "10s", &cfg.ShutdownTimeout},
+		{"POSTGRES_POOL_MAX_CONN_LIFETIME", "1h", &cfg.Postgres.MaxConnLifetime},
+		{"POSTGRES_CONNECT_TIMEOUT", "5s", &cfg.Postgres.ConnectTimeout},
+	} {
+		value, err := time.ParseDuration(envOrDefault(setting.name, setting.fallback))
+		if err != nil || value <= 0 {
+			return nil, fmt.Errorf("%s must be a positive duration, e.g. 5s", setting.name)
+		}
+		*setting.dest = value
+	}
+
+	minConns, err := strconv.ParseInt(envOrDefault("POSTGRES_POOL_MIN_CONNS", "0"), 10, 32)
+	if err != nil || minConns < 0 {
+		return nil, errors.New("POSTGRES_POOL_MIN_CONNS must be a non-negative 32-bit integer")
+	}
+	maxConns, err := strconv.ParseInt(envOrDefault("POSTGRES_POOL_MAX_CONNS", "10"), 10, 32)
+	if err != nil || maxConns < 1 {
+		return nil, errors.New("POSTGRES_POOL_MAX_CONNS must be a positive 32-bit integer")
+	}
+	if minConns > maxConns {
+		return nil, errors.New("POSTGRES_POOL_MIN_CONNS must be <= POSTGRES_POOL_MAX_CONNS")
+	}
+	cfg.Postgres.MinConns = int32(minConns)
+	cfg.Postgres.MaxConns = int32(maxConns)
+
+	return cfg, nil
+}
+
+func envOrDefault(name, fallback string) string {
+	value, exists := os.LookupEnv(name)
+	if !exists {
+		return fallback
+	}
+	return strings.TrimSpace(value)
 }
