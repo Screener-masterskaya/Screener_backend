@@ -19,7 +19,7 @@ type App struct {
 
 // NewApp initializes an App instance and configures the HTTP server with timeouts from cfg.
 func NewApp(cfg *config.Config, log *slog.Logger) *App {
-	handler := newRouter()
+	handler := newRouter(log)
 
 	srv := &http.Server{
 		Addr:         cfg.Address,
@@ -27,6 +27,8 @@ func NewApp(cfg *config.Config, log *slog.Logger) *App {
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 		IdleTimeout:  cfg.IdleTimeout,
+		// Errors reported by net/http itself use the same log format.
+		ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelError),
 	}
 
 	return &App{

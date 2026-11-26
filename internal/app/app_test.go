@@ -17,7 +17,7 @@ import (
 )
 
 func TestRouterAPIv1Root(t *testing.T) {
-	handler := newRouter()
+	handler := newRouter(slog.New(slog.DiscardHandler))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/", nil)
 	rec := httptest.NewRecorder()

@@ -2,20 +2,20 @@ package app
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/Screener-masterskaya/Screener_backend/internal/httpmw"
 )
 
 // newRouter builds the root HTTP handler with core middleware and versioned API routes.
-
-// TODO: add middleware with a logger.
-func newRouter() http.Handler {
+func newRouter(log *slog.Logger) http.Handler {
 	router := chi.NewRouter()
 
-	router.Use(middleware.RequestID)
-	router.Use(middleware.Recoverer)
+	// Order matters: the access log needs the request ID and must see the 500 from Recovery.
+	router.Use(httpmw.RequestID, httpmw.AccessLog(log), httpmw.Recovery(log))
 
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/", okHandler)
