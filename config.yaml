@@ -1,8 +1,0 @@
-log_level: "debug"
-log_format: "text"
-http_server:
-  address: "localhost:8080"
-  read_timeout: 5s
-  write_timeout: 20s
-  idle_timeout: 60s
-  shutdown_timeout: 10s

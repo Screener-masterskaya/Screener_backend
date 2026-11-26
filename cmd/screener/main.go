@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -21,11 +22,12 @@ const (
 )
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "load config:", err)
+		os.Exit(1)
+	}
 
-	//TODO : refactor this to env
-	//init config
-	cfg := config.MustLoad()
-	//init logger
 	log := setupLogger(cfg.LogLevel, cfg.LogFormat)
 
 	app := app.NewApp(cfg, log)
