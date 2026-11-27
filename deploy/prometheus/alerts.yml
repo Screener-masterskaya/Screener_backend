@@ -1,0 +1,16 @@
+groups:
+  - name: screener
+    rules:
+      - alert: ScreenerAppDown
+        expr: up{job="app"} == 0
+        for: 1m
+        annotations:
+          summary: "Prometheus не может получить метрики Screener"
+
+      - alert: ScreenerHigh5xxRate
+        expr: |
+          sum(rate(screener_http_requests_total{job="app",status=~"5.."}[5m]))
+          / sum(rate(screener_http_requests_total{job="app"}[5m])) > 0.05
+        for: 2m
+        annotations:
+          summary: "Доля HTTP 5xx в Screener превышает 5%"

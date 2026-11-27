@@ -35,9 +35,20 @@ services:
     networks:
       - app-network
 
+  prometheus:
+    image: prom/prometheus:v3.13.5
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./deploy/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    networks:
+      - app-network
+
 networks:
   app-network:
     driver: bridge # Обычная bridge-сеть Docker
 
 volumes:
+  prometheus_data:
   pgdata: # Volume для данных базы, Docker создаст его автоматически
