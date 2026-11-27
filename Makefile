@@ -21,3 +21,16 @@ up:
 
 down:
 	docker compose down
+.PHONY: migrate-up migrate-down migrate-status migrate-create test-migrations
+
+export name
+
+migrate-up migrate-down migrate-status:
+	docker compose run --rm -T --build migrate $(@:migrate-%=%)
+
+migrate-create:
+	@test -n "$$name" || { echo 'Usage: make migrate-create name=migration_name' >&2; exit 1; }
+	docker compose run --rm -T --build --no-deps --user "$$(id -u):$$(id -g)" migrate create "$$name" sql
+
+test-migrations:
+	sh scripts/test-migrations.sh
