@@ -10,16 +10,8 @@ import (
 
 	"github.com/Screener-masterskaya/Screener_backend/internal/app"
 	"github.com/Screener-masterskaya/Screener_backend/internal/config"
+	"github.com/Screener-masterskaya/Screener_backend/internal/logger"
 	"github.com/Screener-masterskaya/Screener_backend/internal/platform/postgres"
-)
-
-const (
-	lvlDebug = "debug"
-	lvlInfo  = "info"
-	lvlWarn  = "warn"
-	lvlError = "error"
-	logJSON  = "json"
-	logText  = "text"
 )
 
 func main() {
@@ -35,14 +27,18 @@ func run() int {
 		return 1
 	}
 
-	log := setupLogger(cfg.LogLevel, cfg.LogFormat)
+	log, err := logger.New(os.Stdout, cfg.LogLevel, cfg.LogFormat)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "init logger:", err)
+		return 1
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
 	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL, cfg.Postgres)
 	if err != nil {
-		log.Error("failed to initialize PostgreSQL pool", Err(err))
+		log.Error("failed to initialize PostgreSQL pool", slog.Any("error", err))
 		return 1
 	}
 	defer pool.Close()
@@ -50,56 +46,8 @@ func run() int {
 	app := app.NewApp(cfg, log)
 
 	if err := app.Run(ctx); err != nil {
-		log.Error("stopped with error", Err(err))
+		log.Error("stopped with error", slog.Any("error", err))
 		return 1
 	}
 	return 0
-}
-
-// setupLogger configures and returns a structured logger for the given level and format.
-// It falls back to a text debug logger when an unrecognized format is provided.
-// TODO: move to a separate package with a logger
-func setupLogger(logLevel, logFormat string) *slog.Logger {
-	var log *slog.Logger
-
-	switch logFormat {
-	case logJSON:
-		switch logLevel {
-		case lvlDebug:
-			log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-		case lvlInfo:
-			log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-		case lvlWarn:
-			log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-		case lvlError:
-			log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-		default:
-			log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-		}
-	case logText:
-		switch logLevel {
-		case lvlDebug:
-			log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-		case lvlInfo:
-			log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-		case lvlWarn:
-			log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
-		case lvlError:
-			log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-		default:
-			log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-		}
-	default:
-		log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	}
-
-	return log
-}
-
-// Err formats an error as a structured slog attribute under the "error" key.
-func Err(err error) slog.Attr {
-	return slog.Attr{
-		Key:   "error",
-		Value: slog.StringValue(err.Error()),
-	}
 }
