@@ -52,6 +52,23 @@ PostgreSQL доступен приложению по адресу `postgres:543
 по адресу `localhost:${POSTGRES_PORT}`. `POSTGRES_PORT` задаёт порт компьютера;
 порт PostgreSQL внутри контейнера остаётся `5432`.
 
+## Метрики
+
+Приложение экспортирует метрики Prometheus на отдельном адресе `METRICS_ADDR`
+(по умолчанию `:9090`), недоступном на публичном порту API:
+
+```
+http://localhost:9090/metrics
+```
+
+Собираются:
+
+- HTTP: `screener_http_requests_total`, `screener_http_request_duration_seconds`,
+  `screener_http_requests_in_flight` с метками `method`, `route`, `status`
+  (`route` — шаблон маршрута chi, без сырых URL и ID);
+- пул PostgreSQL (pgxpool): семейство `screener_pgxpool_*`;
+- стандартные метрики Go runtime и процесса (`go_*`, `process_*`).
+
 ## Остановка
 
 ```bash

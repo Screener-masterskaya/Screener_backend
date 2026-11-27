@@ -10,6 +10,7 @@ import (
 
 	"github.com/Screener-masterskaya/Screener_backend/internal/app"
 	"github.com/Screener-masterskaya/Screener_backend/internal/config"
+	"github.com/Screener-masterskaya/Screener_backend/internal/platform/metrics"
 	"github.com/Screener-masterskaya/Screener_backend/internal/platform/postgres"
 )
 
@@ -47,10 +48,39 @@ func run() int {
 	}
 	defer pool.Close()
 
-	app := app.NewApp(cfg, log)
+	// Prometheus-инструментация на дефолтном реестре: метрики HTTP-запросов,
+	// статистика pgxpool, а также коллекторы Go runtime и процесса,
+	// которые client_golang регистрирует автоматически.
+	httpMetrics := metrics.NewHTTP(nil)
+	if err := metrics.RegisterPool(nil, pool); err != nil {
+		log.Error("failed to register pgxpool metrics", Err(err))
+		return 1
+	}
 
-	if err := app.Run(ctx); err != nil {
-		log.Error("stopped with error", Err(err))
+	app := app.NewApp(cfg, log, httpMetrics)
+
+	// Сервер метрик работает на собственном адресе (METRICS_ADDR), отдельном
+	// от публичного порта API. Он останавливается graceful вместе с приложением.
+	metricsServer := metrics.NewServer(cfg.MetricsAddr, metrics.Handler(nil), log, cfg.ShutdownTimeout)
+
+	metricsErrCh := make(chan error, 1)
+	go func() {
+		metricsErrCh <- metricsServer.Run(ctx)
+	}()
+
+	appErr := app.Run(ctx)
+
+	// Гарантируем остановку сервера метрик, даже если приложение завершилось
+	// с ошибкой самостоятельно, и дожидаемся окончания его graceful shutdown.
+	cancel()
+	metricsErr := <-metricsErrCh
+
+	if appErr != nil {
+		log.Error("stopped with error", Err(appErr))
+		return 1
+	}
+	if metricsErr != nil {
+		log.Error("metrics server stopped with error", Err(metricsErr))
 		return 1
 	}
 	return 0

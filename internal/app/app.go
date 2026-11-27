@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/Screener-masterskaya/Screener_backend/internal/config"
+	"github.com/Screener-masterskaya/Screener_backend/internal/platform/metrics"
 )
 
 // App wires together configuration, structured logging, and the HTTP server lifecycle.
@@ -17,9 +18,11 @@ type App struct {
 	server *http.Server
 }
 
-// NewApp initializes an App instance and configures the HTTP server with timeouts from cfg.
-func NewApp(cfg *config.Config, log *slog.Logger) *App {
-	handler := newRouter()
+// NewApp инициализирует экземпляр App и настраивает HTTP-сервер с таймаутами из cfg.
+// httpMetrics инструментирует все запросы API; передайте nil, чтобы отключить
+// инструментацию.
+func NewApp(cfg *config.Config, log *slog.Logger, httpMetrics *metrics.HTTP) *App {
+	handler := newRouter(httpMetrics)
 
 	srv := &http.Server{
 		Addr:         cfg.Address,
