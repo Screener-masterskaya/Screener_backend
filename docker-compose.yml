@@ -31,6 +31,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck: # Liveness: /healthz не зависит от базы
+      test: [ "CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     networks:
       - app-network
