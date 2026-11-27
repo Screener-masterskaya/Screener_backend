@@ -11,6 +11,13 @@ import (
 	"github.com/Screener-masterskaya/Screener_backend/internal/platform/metrics"
 )
 
+// Probe paths. Health routes must be registered with these constants so that
+// the access log filter and the routes cannot drift apart.
+const (
+	healthzPath = "/healthz"
+	readyzPath  = "/readyz"
+)
+
 // newRouter собирает корневой HTTP-обработчик с базовыми middleware
 // и версионированными маршрутами API.
 // httpMetrics инструментирует все запросы; передайте nil, чтобы отключить
@@ -30,8 +37,8 @@ func newRouter(healthHandler *health.Handler, httpMetrics *metrics.HTTP) http.Ha
 	}
 	router.Use(middleware.Recoverer)
 
-	router.Get("/healthz", healthHandler.Liveness)
-	router.Get("/readyz", healthHandler.Readiness)
+	router.Get(healthzPath, healthHandler.Liveness)
+	router.Get(readyzPath, healthHandler.Readiness)
 
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Get("/", okHandler)

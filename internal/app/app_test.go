@@ -30,7 +30,7 @@ func testRouter() http.Handler {
 func TestRouterHealthRoutes(t *testing.T) {
 	handler := testRouter()
 
-	for _, path := range []string{"/healthz", "/readyz"} {
+	for _, path := range []string{healthzPath, readyzPath} {
 		t.Run(path, func(t *testing.T) {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
