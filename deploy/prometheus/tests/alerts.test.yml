@@ -1,0 +1,42 @@
+rule_files:
+  - ../alerts.yml
+evaluation_interval: 15s
+
+tests:
+  - name: App stays down for a minute and then recovers
+    interval: 15s
+    input_series:
+      - series: 'up{job="app"}'
+        values: '1 0 0 0 0 0 1'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ScreenerAppDown
+        exp_alerts: []
+      - eval_time: 1m15s
+        alertname: ScreenerAppDown
+        exp_alerts:
+          - exp_labels:
+              job: app
+            exp_annotations:
+              summary: "Prometheus не может получить метрики Screener"
+      - eval_time: 1m30s
+        alertname: ScreenerAppDown
+        exp_alerts: []
+
+  - name: Ten percent of responses are errors
+    interval: 15s
+    input_series:
+      - series: 'screener_http_requests_total{job="app",status="200"}'
+        values: '0+90x24'
+      - series: 'screener_http_requests_total{job="app",status="503"}'
+        values: '0+10x24'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ScreenerHigh5xxRate
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: ScreenerHigh5xxRate
+        exp_alerts:
+          - exp_labels: {}
+            exp_annotations:
+              summary: "Доля HTTP 5xx в Screener превышает 5%"
