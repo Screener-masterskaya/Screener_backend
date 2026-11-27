@@ -57,7 +57,7 @@ func run() int {
 		return 1
 	}
 
-	app := app.NewApp(cfg, log, httpMetrics)
+	app := app.NewApp(cfg, log, pool, httpMetrics)
 
 	// Сервер метрик работает на собственном адресе (METRICS_ADDR), отдельном
 	// от публичного порта API. Он останавливается graceful вместе с приложением.

@@ -25,10 +25,10 @@ type App struct {
 }
 
 // NewApp инициализирует экземпляр App и настраивает HTTP-сервер с таймаутами из cfg.
-// httpMetrics инструментирует все запросы API; передайте nil, чтобы отключить
-// инструментацию.
-func NewApp(cfg *config.Config, log *slog.Logger, httpMetrics *metrics.HTTP) *App {
-	healthHandler := health.New(log, readinessTimeout)
+// db проверяется в /readyz. httpMetrics инструментирует все запросы API;
+// передайте nil, чтобы отключить инструментацию.
+func NewApp(cfg *config.Config, log *slog.Logger, db health.Pinger, httpMetrics *metrics.HTTP) *App {
+	healthHandler := health.New(log, readinessTimeout, health.Check{Name: "postgres", Pinger: db})
 	handler := newRouter(healthHandler, httpMetrics)
 
 	srv := &http.Server{

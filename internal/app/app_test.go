@@ -17,6 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// okPinger stands in for a reachable database.
+type okPinger struct{}
+
+func (okPinger) Ping(context.Context) error { return nil }
+
 func testRouter() http.Handler {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return newRouter(health.New(logger, time.Second), nil)
@@ -85,7 +90,7 @@ func TestAppRunAndGracefulShutdown(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	application := NewApp(cfg, logger, nil)
+	application := NewApp(cfg, logger, okPinger{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
