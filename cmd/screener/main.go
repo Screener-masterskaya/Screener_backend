@@ -10,6 +10,7 @@ import (
 
 	"github.com/Screener-masterskaya/Screener_backend/internal/app"
 	"github.com/Screener-masterskaya/Screener_backend/internal/config"
+	"github.com/Screener-masterskaya/Screener_backend/internal/platform/postgres"
 )
 
 const (
@@ -22,23 +23,37 @@ const (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run initializes application dependencies, runs the application,
+// and ensures resource cleanup before returning the process exit code.
+func run() int {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load config:", err)
-		os.Exit(1)
+		return 1
 	}
 
 	log := setupLogger(cfg.LogLevel, cfg.LogFormat)
 
-	app := app.NewApp(cfg, log)
-
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	pool, err := postgres.NewPool(ctx, cfg.DatabaseURL, cfg.Postgres)
+	if err != nil {
+		log.Error("failed to initialize PostgreSQL pool", Err(err))
+		return 1
+	}
+	defer pool.Close()
+
+	app := app.NewApp(cfg, log)
+
 	if err := app.Run(ctx); err != nil {
 		log.Error("stopped with error", Err(err))
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // setupLogger configures and returns a structured logger for the given level and format.
