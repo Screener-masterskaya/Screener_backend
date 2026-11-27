@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -91,7 +92,47 @@ func TestNewPoolUnavailableDB(t *testing.T) {
 	require.NoError(t, err, "failed to stop container")
 
 	pool, err := postgres.NewPool(ctx, databaseURL, cfg)
-	require.EqualError(t, err, "failed to establish PostgreSQL connection")
+	require.ErrorContains(t, err, "failed to establish PostgreSQL connection")
 	require.Nil(t, pool)
 	require.NotContains(t, err.Error(), password)
+}
+
+func TestNewPoolInvalidPassword(t *testing.T) {
+	const wrongPassword = "wrong_password"
+
+	ctx := context.Background()
+
+	container, err := tcpostgres.Run(
+		ctx,
+		"postgres:18.7-alpine3.24",
+		tcpostgres.WithDatabase("screener"),
+		tcpostgres.WithUsername("user"),
+		tcpostgres.WithPassword(password),
+		tcpostgres.BasicWaitStrategies(),
+	)
+	testcontainers.CleanupContainer(t, container)
+	require.NoError(t, err, "failed to start container")
+
+	databaseURL, err := container.ConnectionString(
+		ctx,
+		"sslmode=disable",
+	)
+	require.NoError(t, err, "failed to get connection string")
+
+	parsedURL, err := url.Parse(databaseURL)
+	require.NoError(t, err)
+
+	parsedURL.User = url.UserPassword(
+		parsedURL.User.Username(),
+		wrongPassword,
+	)
+
+	databaseURL = parsedURL.String()
+
+	pool, err := postgres.NewPool(ctx, databaseURL, cfg)
+	require.ErrorContains(t, err, "failed to establish PostgreSQL connection")
+	require.ErrorContains(t, err, "password authentication failed")
+	require.Nil(t, pool)
+	require.NotContains(t, err.Error(), password)
+	require.NotContains(t, err.Error(), wrongPassword)
 }
