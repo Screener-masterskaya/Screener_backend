@@ -78,7 +78,11 @@ docker compose logs -f postgres
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` |
 | `LOG_FORMAT` | `text`, `json` | `text` |
 
-На каждый HTTP-запрос пишется одна запись access-лога с уровнем `info`:
+На каждый HTTP-запрос пишется одна запись access-лога с уровнем `info`. Исключение:
+запросы к `/healthz` и `/readyz` (точное совпадение пути) не пишутся, потому что
+проверки состояния идут каждые несколько секунд и создают шум.
+
+Пример записи:
 
 ```json
 {"time":"...","level":"INFO","msg":"http request","method":"GET","route":"/api/v1","status":200,"duration_ms":0.5,"request_id":"test-123"}

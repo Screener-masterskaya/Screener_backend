@@ -17,9 +17,22 @@ const unmatchedRoute = "unmatched"
 // It logs the route pattern ("/users/{id}"), never the raw path or query,
 // and no headers or bodies, so secrets do not reach the logs.
 // Register it after RequestID and before the panic recovery middleware.
-func AccessLog(log *slog.Logger) func(http.Handler) http.Handler {
+//
+// Requests whose path exactly equals one of skipPaths are not logged. Use it
+// for high-frequency probes such as health checks.
+func AccessLog(log *slog.Logger, skipPaths ...string) func(http.Handler) http.Handler {
+	skip := make(map[string]bool, len(skipPaths))
+	for _, path := range skipPaths {
+		skip[path] = true
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if skip[r.URL.Path] {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			start := time.Now()
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 

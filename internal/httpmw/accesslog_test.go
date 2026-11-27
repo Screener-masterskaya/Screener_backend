@@ -59,3 +59,30 @@ func TestAccessLog(t *testing.T) {
 		})
 	}
 }
+
+func TestAccessLogSkipPaths(t *testing.T) {
+	tests := []struct {
+		name    string
+		target  string
+		wantLog bool
+	}{
+		{name: "skipped path", target: "/healthz", wantLog: false},
+		{name: "unknown path is still logged", target: "/nope", wantLog: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			log, err := logger.New(&buf, "info", logger.FormatJSON)
+			require.NoError(t, err)
+
+			router := chi.NewRouter()
+			router.Use(httpmw.AccessLog(log, "/healthz"))
+			router.Get("/healthz", func(http.ResponseWriter, *http.Request) {})
+
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, tt.target, nil))
+
+			require.Equal(t, tt.wantLog, buf.Len() > 0)
+		})
+	}
+}
