@@ -17,7 +17,7 @@ import (
 )
 
 func TestRouterAPIv1Root(t *testing.T) {
-	handler := newRouter()
+	handler := newRouter(nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/", nil)
 	rec := httptest.NewRecorder()
@@ -31,6 +31,19 @@ func TestRouterAPIv1Root(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "ok", body["status"])
+}
+
+func TestRouterMetricsNotExposedOnAPIPort(t *testing.T) {
+	handler := newRouter(nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	// Эндпоинт Prometheus обслуживается только на выделенном сервере
+	// METRICS_ADDR и не должен быть доступен через публичный API-роутер.
+	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestAppRunAndGracefulShutdown(t *testing.T) {
@@ -53,7 +66,7 @@ func TestAppRunAndGracefulShutdown(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	application := NewApp(cfg, logger)
+	application := NewApp(cfg, logger, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
