@@ -12,12 +12,36 @@ import (
 	"time"
 
 	"github.com/Screener-masterskaya/Screener_backend/internal/config"
+	"github.com/Screener-masterskaya/Screener_backend/internal/health"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// okPinger stands in for a reachable database.
+type okPinger struct{}
+
+func (okPinger) Ping(context.Context) error { return nil }
+
+func testRouter() http.Handler {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	return newRouter(health.New(logger, time.Second), nil)
+}
+
+func TestRouterHealthRoutes(t *testing.T) {
+	handler := testRouter()
+
+	for _, path := range []string{healthzPath, readyzPath} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+
+			assert.Equal(t, http.StatusOK, rec.Code)
+		})
+	}
+}
+
 func TestRouterAPIv1Root(t *testing.T) {
-	handler := newRouter(nil)
+	handler := testRouter()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/", nil)
 	rec := httptest.NewRecorder()
@@ -34,7 +58,7 @@ func TestRouterAPIv1Root(t *testing.T) {
 }
 
 func TestRouterMetricsNotExposedOnAPIPort(t *testing.T) {
-	handler := newRouter(nil)
+	handler := testRouter()
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -66,7 +90,7 @@ func TestAppRunAndGracefulShutdown(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	application := NewApp(cfg, logger, nil)
+	application := NewApp(cfg, logger, okPinger{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -105,4 +129,9 @@ func TestAppRunAndGracefulShutdown(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for Run to return after context cancellation")
 	}
+
+	// Run must mark the service as shutting down, so /readyz reports 503.
+	rec := httptest.NewRecorder()
+	application.server.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 }

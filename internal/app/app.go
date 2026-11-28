@@ -6,23 +6,30 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/Screener-masterskaya/Screener_backend/internal/config"
+	"github.com/Screener-masterskaya/Screener_backend/internal/health"
 	"github.com/Screener-masterskaya/Screener_backend/internal/platform/metrics"
 )
+
+// readinessTimeout bounds each dependency check in /readyz.
+const readinessTimeout = 2 * time.Second
 
 // App wires together configuration, structured logging, and the HTTP server lifecycle.
 type App struct {
 	cfg    *config.Config
 	log    *slog.Logger
 	server *http.Server
+	health *health.Handler
 }
 
 // NewApp инициализирует экземпляр App и настраивает HTTP-сервер с таймаутами из cfg.
-// httpMetrics инструментирует все запросы API; передайте nil, чтобы отключить
-// инструментацию.
-func NewApp(cfg *config.Config, log *slog.Logger, httpMetrics *metrics.HTTP) *App {
-	handler := newRouter(httpMetrics)
+// db проверяется в /readyz. httpMetrics инструментирует все запросы API;
+// передайте nil, чтобы отключить инструментацию.
+func NewApp(cfg *config.Config, log *slog.Logger, db health.Pinger, httpMetrics *metrics.HTTP) *App {
+	healthHandler := health.New(log, readinessTimeout, health.Check{Name: "postgres", Pinger: db})
+	handler := newRouter(healthHandler, httpMetrics)
 
 	srv := &http.Server{
 		Addr:         cfg.Address,
@@ -36,6 +43,7 @@ func NewApp(cfg *config.Config, log *slog.Logger, httpMetrics *metrics.HTTP) *Ap
 		cfg:    cfg,
 		log:    log,
 		server: srv,
+		health: healthHandler,
 	}
 }
 
@@ -57,6 +65,8 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		a.log.Info("shutdown signal received, stopping server")
+		a.health.SetShuttingDown()
+
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), a.cfg.ShutdownTimeout)
 		defer cancel()
 
